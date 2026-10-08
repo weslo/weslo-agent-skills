@@ -3,7 +3,7 @@
 Agent skills I use across projects, one per `skills/<name>/SKILL.md`.
 
 - `address-github-issue` takes a GitHub issue from investigation to an open PR, and merges it when asked.
-- `complete-github-issue` squash-merges an approved PR, confirms its issue closed, resyncs main and deletes the branch.
+- `complete-github-issue` waits for CI, squash-merges an approved PR once it passes, confirms its issue closed, resyncs main and deletes the branch. A CI failure stops it with a fix or a diagnosis for you.
 - `review-github-pr` reviews a PR with inline comments, then confirms fixes and resolves threads on later passes.
 
 ## Install

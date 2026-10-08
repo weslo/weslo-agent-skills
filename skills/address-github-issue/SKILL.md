@@ -26,9 +26,10 @@ each issue stands without opening it:
 - 👋 **Needs input or ready for review** — whenever the next move is the user's: a question
   or decision put to them, a blocker only they can clear, the PR opened, or a round of
   review feedback addressed.
-- ✅ **Merged and closed** — once the PR is merged and the issue closed, verified as section
-  9 describes. When `/complete-github-issue` does the merge instead, it sets this from
-  whichever session it runs in.
+- ⏳ **Waiting on CI** — `/complete-github-issue` sets this while it waits for the PR's checks
+  before merging.
+- ✅ **Merged and closed** — `/complete-github-issue` sets this once the PR is merged and the
+  issue closed, from whichever session it runs in.
 
 Only the prefix changes: keep the text exactly as you first set it, with the issue title as
 GitHub has it, and rename only when the status actually changes. Set 👋 before the message
@@ -210,43 +211,10 @@ reviewer, and it will be stale by the end of a long review cycle if you never re
 
 ## 9. Merge and clean up — only when asked
 
-This step also exists on its own as `/complete-github-issue`, the bookend to this skill; use
-that when the user asks to merge a PR that was not opened in this session, and follow it for
-the checks it adds. The short form is here so a single session can run end to end.
-
 **Do not merge on your own initiative.** Merging is outward-facing and awkward to undo;
-wait for the user to ask. When they do, the default is squash-and-merge:
-
-```bash
-gh pr view <N> --json state,mergeable,mergeStateStatus     # confirm it is clean first
-gh pr merge <N> --squash --delete-branch \
-  --subject "<title> (#<N>)" --body-file <file>
-```
-
-Write a real squash message — it becomes the permanent history entry for the whole branch,
-so it should summarize the change and its verification rather than being a list of commit
-subjects. Include `Closes #<N>`.
-
-Then resync local and confirm the end state rather than assuming it:
-
-```bash
-git checkout main
-git pull --ff-only origin main
-git fetch --prune origin
-git branch -D <branch>                    # gh cannot delete the branch you are standing on
-```
-
-Verify all four outcomes:
-
-```bash
-gh pr view <N> --json state,mergedAt      # expect MERGED
-gh issue view <N> --json state            # expect CLOSED
-git branch -a                             # branch gone locally and remotely
-git log --oneline -2                      # local main carries the squashed commit
-```
-
-If the issue did not auto-close (a missing or malformed `Closes #N`), close it explicitly
-with `gh issue close <N>` rather than leaving it open.
+wait for the user to ask. When they do, run `/complete-github-issue`: it waits for CI,
+merges, confirms the issue closed, resyncs local main, removes the branch, and keeps this
+session's status current throughout.
 
 ## Reporting back
 
