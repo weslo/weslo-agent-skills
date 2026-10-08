@@ -46,7 +46,8 @@ gh pr view <N> --json number,title,state,mergeable,mergeStateStatus,headRefName,
 gh pr checks <N>          # exit 0: all passed, 1: something failed, 8: still running
 ```
 
-- **Still running:** wait for it to finish rather than merging early or stopping to ask. Watch
+- **Still running:** wait for it to finish rather than merging early or stopping to ask. Set the
+  issue's session status to ⏳ first, finding and renaming it as step 6 describes. Then watch
   the checks with the Bash tool's `run_in_background` and a timeout well past the slowest CI run,
   so the session resumes when they finish:
 
@@ -60,7 +61,9 @@ gh pr checks <N>          # exit 0: all passed, 1: something failed, 8: still ru
   pushed moments ago, give its checks a minute to register before concluding that.
 - **Passed:** read `mergeStateStatus` again, expect `CLEAN`, and carry on with step 3 and the rest
   of this skill.
-- **Failed:** do not merge. Find out what failed and why before deciding anything:
+- **Failed:** do not merge. Either way below ends with you stopping for the user, so set the
+  issue's session to 👋 before the message that hands over. Find out what failed and why before
+  deciding anything:
 
   ```bash
   gh pr checks <N> --json name,bucket,workflow,link   # which checks failed, and their runs
@@ -140,9 +143,10 @@ gh issue close <issue> --comment "Fixed in #<N>."
 ## 6. Mark the issue's session done
 
 `/address-github-issue` keeps a status emoji in front of the name of the session that worked the
-issue: `<status> Address Issue #<issue>: <issue title>`. Once step 5 shows the PR merged and the
-issue closed, swap that emoji for ✅, whichever session ran the merge, so the session list shows
-the issue is finished. Only the prefix changes; the text after it stays.
+issue: `<status> Address Issue #<issue>: <issue title>`. Step 2 sets it to ⏳ while CI runs and to
+👋 if CI fails. Once step 5 shows the PR merged and the issue closed, swap it for ✅, whichever
+session ran the merge, so the session list shows the issue is finished. Only the prefix changes;
+the text after it stays.
 
 - Find the session with the desktop app's `mcp__ccd_session_mgmt__list_sessions`, with `limit`
   raised past its default of 20, since that session may have been idle for days. Match a title
