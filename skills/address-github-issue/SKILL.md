@@ -216,6 +216,10 @@ wait for the user to ask. When they do, run `/complete-github-issue`: it waits f
 merges, confirms the issue closed, resyncs local main, removes the branch, and keeps this
 session's status current throughout.
 
+Opening the PR, or finishing a round of review feedback, hands the work to the user to
+review. The user replies with review feedback, or runs `/complete-github-issue`, when they
+are ready.
+
 ## Reporting back
 
 Lead with the outcome and the things the user cannot see for themselves: what changed, what
