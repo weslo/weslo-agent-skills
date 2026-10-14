@@ -101,7 +101,7 @@ An `eval` snippet is the body of a method.
 - **No `using` directives.** They're a compile error, so fully qualify every type (`System.Text.StringBuilder`, `UnityEngine.GameObject`). A bare `Object` is ambiguous; write `UnityEngine.Object`.
 - **Getting output back:** `return` a value to get it in the result. `Debug.Log` output does not come back; write longer output to a file with `System.IO.File.WriteAllText` and read it.
 - **Size:** keep each call well under 5 s.
-- **Prefer `eval` to the MCP's `Unity_RunCommand`.** `eval` has no sandbox and references the project's assemblies; `Unity_RunCommand` can't reference project assemblies or use reflection.
+- **Prefer `eval` to the MCP's `Unity_RunCommand`.** `eval` has no sandbox and references the project's assemblies; `Unity_RunCommand` can't reference project assemblies or use reflection. In a player, `eval` doesn't reference them either; see "Development players".
 - **Prefer public entry points.** Use the project's public entry points rather than reflecting into private members, whose names can change without a compile error to warn you.
 - **Sampling animation:** an Animator on a model instantiated straight from an FBX defaults to `CullUpdateTransforms` and doesn't evaluate off camera. Set it to `AlwaysAnimate`, and check that some bone moves before trusting the samples.
 
@@ -124,9 +124,31 @@ The editor runs one command at a time, and contention shows up as spurious timeo
 - Never give a subagent the editor while the main session is compiling or running tests.
 
 ## Development players
-A development standalone build can run the same command server:
-1. Turn on Project Settings › Pipeline › Runtime › `enableInBuilds`.
-2. Build with Development Build checked, and launch the build.
-3. Drive it with `unity command --runtime-path <path> <command>`. On macOS the path is the `.app` bundle; elsewhere it's the folder next to the executable.
+A development standalone build can run the same command server, so an agent can drive a built player as it drives the editor, for example as a second network peer.
+1. **Turn on** Project Settings › Pipeline › Runtime › `enableInBuilds`, with `set_runtime_pipeline_settings --settings '{"enableInBuilds":true}' --confirm true`. It's stored in `ProjectSettings/Packages/com.unity.pipeline/RuntimePipelineConfig.json`.
+2. **Build** outside play mode, as a background command that polls `build_status`:
+   ```bash
+   unity command build --target StandaloneOSX --outputPath <path>.app --options '["Development","DetailedBuildReport"]' --confirm true
+   ```
+   - Supplying `options` drops the default `DetailedBuildReport`, so list it.
+   - `build_status`'s `data.result` is a JSON string, so parse it twice. Don't recurse on `result`: the build report inside has its own `result` key (`Succeeded`).
+3. **Launch** it. On macOS, `open -g -n <app> --args …` keeps it from taking focus from the user. It's ready when `unity command --runtime-path <path> runtime_status` succeeds.
+4. **Drive it** with `unity command --runtime-path <path> <command>`. On macOS the path is the `.app` bundle; elsewhere it's the folder next to the executable. `unity command --runtime-path <path>` lists what the player exposes; `quit` closes it.
 
-Release builds leave the server out entirely.
+**What's different in a player:**
+- **`eval` can't name the project's own types.** In a player it only references assemblies named `UnityEngine*`, `Assembly-CSharp`, `netstandard`, `mscorlib`, `System.*` or `Unity.Pipeline*`. Types in the project's asmdefs, and in packages such as TextMeshPro, fail with CS0246. Reach them by reflection, finding each type through `AppDomain.CurrentDomain.GetAssemblies()`, or write a command.
+- **A `[CliCommand]` static method compiles with the project**, so it uses the project's types directly. A player finds it by reflection over its loaded assemblies, and the editor finds it after a recompile.
+  - The attribute lives in `Unity.Pipeline`, which only compiles for the editor and development builds. Put commands in an assembly constrained to `UNITY_EDITOR || DEVELOPMENT_BUILD`.
+  - Leave `MainThreadRequired` on for anything that touches Unity objects.
+  - Commands answer in tens of milliseconds, where `eval` compiles every call. But changing a command means rebuilding the player, so `eval` stays the tool for one-off probes.
+- **There's no `EditorApplication.update`.** For per-frame sampling, add a lambda to `Application.onBeforeRender` from `eval`; that works in editor play mode too. Stamp each row with wall-clock time, so files from two processes line up.
+- **Screenshots:** `ScreenCapture.CaptureScreenshot(path)` from `eval`.
+- **Main-thread commands run from the player's `Update`.** So a player that pauses when it loses focus stops answering. Check Player Settings › Run In Background.
+
+**What `enableInBuilds` leaves around:**
+- **Build folders:** each build bakes the settings into `Assets/Settings/Pipeline/Resources/`. It deletes the baked assets afterwards, but leaves the folders and their `.meta` files. A project that doesn't use that folder itself can ignore `/Assets/Settings/` and `/Assets/Settings.meta`.
+- **A port file in the project:** editor play mode runs the runtime server too, and writes `.unity-pipeline-runtime-port` at the project root while it plays. Ignore it.
+
+**Release builds leave the server out entirely.** The Pipeline's runtime assemblies are constrained to `UNITY_EDITOR || DEVELOPMENT_BUILD || ENABLE_RUNTIME_PIPELINE`. To confirm a release build lacks some code:
+- Check the build's `Managed` folder and `ScriptingAssemblies.json`.
+- Search binaries for a string literal as UTF-16, the way .NET stores it; a plain `grep` misses it.
