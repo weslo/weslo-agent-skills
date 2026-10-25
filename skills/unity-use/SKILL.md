@@ -29,11 +29,11 @@ Stop and tell the user. Say what you saw and walk them through the fix. Don't wo
 | `unity: command not found` | The CLI isn't installed. | Installing it. The `unity-cli` skill's "Install the CLI" step has the command. |
 | `unity pipeline list` shows the project without the Pipeline package, or `unity status` lists no editor while one is open | The project lacks `com.unity.pipeline`. | `unity pipeline install`. This changes the project's package manifest, so the user approves it. |
 | No connection after compile errors | The editor is in Safe Mode, where the Pipeline package doesn't load. | Fixing the compile errors, then reopening. The `unity-cli` skill has the recovery steps. |
-| Commands keep failing on a healthy, automated editor (not a reload, not one timeout) | Something is wrong with the CLI or the editor. | What you ran, `unity doctor`, and the end of `Editor.log`. |
+| Commands keep failing on a healthy, automated editor (not a reload, not one timeout) | Something is wrong with the CLI or the editor. | What you ran, `unity doctor`, and the end of `Editor.log` (`~/Library/Logs/Unity/Editor.log` on macOS, `%LOCALAPPDATA%\Unity\Editor\Editor.log` on Windows). |
 | The MCP's tools are missing *(only when you are using the MCP)* | The MCP server isn't configured for this client, or the package that provides it isn't installed. | Configuring it (`unity mcp configure <client>`), or adding the package. |
 | An MCP call hangs, or the MCP reports "Unity not detected" for well over 30 s outside a reload | The MCP has broken on the editor side. | Restarting the editor. Don't re-issue the hung call; check `Editor.log` first. |
 
-**Don't wait long before stopping.** A domain reload clears in about 15 s, so if the CLI still can't connect after a minute, stop and tell the user instead of retrying.
+**Don't wait long before stopping.** A domain reload clears in about 15 s, so if the CLI still can't connect after a minute, stop and tell the user instead of retrying. A first import is the exception; see "Opening, checking and restarting the editor".
 
 **Never route around a broken tool by hand-editing editor-owned files unless the user explicitly says to.** A blocked task is recoverable; a corrupted project is not.
 
@@ -43,13 +43,17 @@ Stop and tell the user. Say what you saw and walk them through the fix. Don't wo
    ```bash
    unity open . --args "-automated"
    ```
-   It reaches `ready` in 15 seconds to a minute, and the Unity MCP comes back with it. `-automated` stops modal dialogs from stalling commands.
-3. **An editor is running:** check how it was launched:
+   It reaches `ready` in 15 seconds to a minute, and the Unity MCP comes back with it. `-automated` stops modal dialogs from stalling commands. A project with no `Library` folder, such as a fresh clone, imports every asset first: `unity status` lists it as `starting`, or not at all, for several minutes. Wait for `ready` rather than stopping.
+3. **An editor is running:** check how it was launched. On macOS:
    ```bash
    pgrep -f "Unity.app/Contents/MacOS/Unity.*-automated"
    ```
+   On Windows, Git Bash has no `pgrep`, and the Unity CLI's own helper processes are also named `unity.exe`, so match on the editor's path:
+   ```bash
+   powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='Unity.exe'\" | Where-Object { \$_.ExecutablePath -like '*\\Editor\\Unity.exe' -and \$_.CommandLine -like '*-automated*' } | Select-Object -ExpandProperty ProcessId"
+   ```
    - **It prints a PID:** the editor was launched for automation. Drive it.
-   - **No output:** a person opened it from the Hub or the Dock. You may still drive it. If it stalls or misbehaves, restart it in automation mode with `unity close .`, then `unity open . --args "-automated"`. Typical misbehaviour: calls landing near 5 s, calls failing half the time, or calls hanging. Add `--force` to `unity close` if the editor doesn't exit.
+   - **No output:** a person opened it from the Hub, the Dock or the Start menu. You may still drive it. If it stalls or misbehaves, restart it in automation mode with `unity close .`, then `unity open . --args "-automated"`. Typical misbehaviour: calls landing near 5 s, calls failing half the time, or calls hanging. Add `--force` to `unity close` if the editor doesn't exit.
 4. **Before closing any editor, check whether it looks in use.** `unity close` exits without saving.
    - Run:
      ```bash
@@ -130,9 +134,10 @@ A development standalone build can run the same command server, so an agent can 
    ```bash
    unity command build --target StandaloneOSX --outputPath <path>.app --options '["Development","DetailedBuildReport"]' --confirm true
    ```
+   On Windows, build `--target StandaloneWindows64` with `--outputPath <folder>/<name>.exe`.
    - Supplying `options` drops the default `DetailedBuildReport`, so list it.
    - `build_status`'s `data.result` is a JSON string, so parse it twice. Don't recurse on `result`: the build report inside has its own `result` key (`Succeeded`).
-3. **Launch** it. On macOS, `open -g -n <app> --args …` keeps it from taking focus from the user. It's ready when `unity command --runtime-path <path> runtime_status` succeeds.
+3. **Launch** it. On macOS, `open -g -n <app> --args …` keeps it from taking focus from the user. Git Bash on Windows has no `open`; use `powershell.exe -NoProfile -Command "Start-Process '<exe>' -ArgumentList '…'"`. It's ready when `unity command --runtime-path <path> runtime_status` succeeds.
 4. **Drive it** with `unity command --runtime-path <path> <command>`. On macOS the path is the `.app` bundle; elsewhere it's the folder next to the executable. `unity command --runtime-path <path>` lists what the player exposes; `quit` closes it.
 
 **What's different in a player:**
