@@ -1,6 +1,6 @@
 ---
 name: unity-use
-description: Read before driving a Unity editor or development player from an agent session, through the Unity CLI (`unity status`, `unity command …`, `eval`) or the Unity MCP. Covers which tool to use (the CLI whenever it can do the job, the MCP only for what the CLI can't); what to do when the CLI, its Pipeline package or the MCP is missing or broken (stop and walk the user through the fix, never hand-edit around it); opening, checking and restarting the editor in automation mode; the 5 s limit on every command and what a timeout does and doesn't mean; domain reloads; compiling and tests; waiting without polling; writing `eval` snippets that compile; files only the editor may change; and development players. Use it before the first editor command of a session, and whenever a command times out, stalls or the editor drops. Command syntax and flags are in the `unity-cli` skill.
+description: Read before driving a Unity editor or development player from an agent session, through the Unity CLI (`unity status`, `unity command …`, `script eval`) or the Unity MCP. Covers which tool to use (the CLI whenever it can do the job, the MCP only for what the CLI can't); what to do when the CLI, its Pipeline package or the MCP is missing or broken (stop and walk the user through the fix, never hand-edit around it); opening, checking and restarting the editor in automation mode; the 5 s limit on every command and what a timeout does and doesn't mean; domain reloads; compiling and tests; waiting without polling; writing `eval` snippets that compile; files only the editor may change; and development players. Use it before the first editor command of a session, and whenever a command times out, stalls or the editor drops. Command syntax and flags are in the `unity-cli` skill.
 ---
 
 # Using Unity from an agent session
@@ -9,13 +9,13 @@ How to drive a Unity editor reliably. The `unity-cli` skill documents the comman
 
 ## Which tool
 1. **The Unity CLI, whenever it can do the job.** It covers:
-   - running C# in the editor (`eval`);
+   - running C# in the editor (`script eval`);
    - assets, prefabs and scenes;
    - packages, builds and tests;
-   - screenshots (`capture_game_view`, `capture_scene_view`, `screenshot`);
+   - screenshots (`capture game_view`, `capture scene_view`, `capture screenshot`);
    - opening and closing the editor.
 
-   `unity command` lists what the connected editor exposes; `unity commands` lists the CLI's own commands. Check those lists before deciding the CLI can't do something.
+   Editor commands are grouped, and run as `unity command <group> <name>`. `unity command` lists the connected editor's groups, `unity command <group>` lists one group's commands, and `unity commands` lists the CLI's own commands. Check those lists before deciding the CLI can't do something.
 2. **The Unity MCP, only for what the CLI can't do**, such as profiler analysis or AI asset generation.
 3. **Never hand-editing editor-owned files** to get around either tool (see below).
 
@@ -29,11 +29,11 @@ Stop and tell the user. Say what you saw and walk them through the fix. Don't wo
 | `unity: command not found` | The CLI isn't installed. | Installing it. The `unity-cli` skill's "Install the CLI" step has the command. |
 | `unity pipeline list` shows the project without the Pipeline package, or `unity status` lists no editor while one is open | The project lacks `com.unity.pipeline`. | `unity pipeline install`. This changes the project's package manifest, so the user approves it. |
 | No connection after compile errors | The editor is in Safe Mode, where the Pipeline package doesn't load. | Fixing the compile errors, then reopening. The `unity-cli` skill has the recovery steps. |
-| Commands keep failing on a healthy, automated editor (not a reload, not one timeout) | Something is wrong with the CLI or the editor. | What you ran, `unity doctor`, and the end of `Editor.log`. |
+| Commands keep failing on a healthy, automated editor (not a reload, not one timeout) | Something is wrong with the CLI or the editor. | What you ran, `unity doctor`, and the end of `Editor.log` (`~/Library/Logs/Unity/Editor.log` on macOS, `%LOCALAPPDATA%\Unity\Editor\Editor.log` on Windows). |
 | The MCP's tools are missing *(only when you are using the MCP)* | The MCP server isn't configured for this client, or the package that provides it isn't installed. | Configuring it (`unity mcp configure <client>`), or adding the package. |
 | An MCP call hangs, or the MCP reports "Unity not detected" for well over 30 s outside a reload | The MCP has broken on the editor side. | Restarting the editor. Don't re-issue the hung call; check `Editor.log` first. |
 
-**Don't wait long before stopping.** A domain reload clears in about 15 s, so if the CLI still can't connect after a minute, stop and tell the user instead of retrying.
+**Don't wait long before stopping.** A domain reload clears in about 15 s, so if the CLI still can't connect after a minute, stop and tell the user instead of retrying. A first import is the exception; see "Opening, checking and restarting the editor".
 
 **Never route around a broken tool by hand-editing editor-owned files unless the user explicitly says to.** A blocked task is recoverable; a corrupted project is not.
 
@@ -43,17 +43,21 @@ Stop and tell the user. Say what you saw and walk them through the fix. Don't wo
    ```bash
    unity open . --args "-automated"
    ```
-   It reaches `ready` in 15 seconds to a minute, and the Unity MCP comes back with it. `-automated` stops modal dialogs from stalling commands.
-3. **An editor is running:** check how it was launched:
+   It reaches `ready` in 15 seconds to a minute, and the Unity MCP comes back with it. `-automated` stops modal dialogs from stalling commands. A project with no `Library` folder, such as a fresh clone, imports every asset first: `unity status` lists it as `starting`, or not at all, for several minutes. Wait for `ready` rather than stopping.
+3. **An editor is running:** check how it was launched. On macOS:
    ```bash
    pgrep -f "Unity.app/Contents/MacOS/Unity.*-automated"
    ```
+   On Windows, Git Bash has no `pgrep`, and the Unity CLI's own helper processes are also named `unity.exe`, so match on the editor's path:
+   ```bash
+   powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='Unity.exe'\" | Where-Object { \$_.ExecutablePath -like '*\\Editor\\Unity.exe' -and \$_.CommandLine -like '*-automated*' } | Select-Object -ExpandProperty ProcessId"
+   ```
    - **It prints a PID:** the editor was launched for automation. Drive it.
-   - **No output:** a person opened it from the Hub or the Dock. You may still drive it. If it stalls or misbehaves, restart it in automation mode with `unity close .`, then `unity open . --args "-automated"`. Typical misbehaviour: calls landing near 5 s, calls failing half the time, or calls hanging. Add `--force` to `unity close` if the editor doesn't exit.
+   - **No output:** a person opened it from the Hub, the Dock or the Start menu. You may still drive it. If it stalls or misbehaves, restart it in automation mode with `unity close .`, then `unity open . --args "-automated"`. Typical misbehaviour: calls landing near 5 s, calls failing half the time, or calls hanging. Add `--force` to `unity close` if the editor doesn't exit.
 4. **Before closing any editor, check whether it looks in use.** `unity close` exits without saving.
    - Run:
      ```bash
-     unity command eval 'int dirty = 0; for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++) { if (UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).isDirty) { dirty++; } } return "dirtyScenes=" + dirty + " prefabStage=" + (UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage() != null) + " playing=" + UnityEditor.EditorApplication.isPlaying;'
+     unity command script eval 'int dirty = 0; for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++) { if (UnityEngine.SceneManagement.SceneManager.GetSceneAt(i).isDirty) { dirty++; } } return "dirtyScenes=" + dirty + " prefabStage=" + (UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage() != null) + " playing=" + UnityEditor.EditorApplication.isPlaying;'
      ```
    - **Ask the user first** if it reports unsaved scenes, an open prefab, or play mode. Also ask if the editor was opened by hand and too broken to answer.
 
@@ -71,10 +75,10 @@ Every `unity command` call runs on the editor's main thread and is limited to 5 
 - start it inside the editor so it runs by itself, for example on an `EditorApplication.update` callback that writes its result to a file, then wait for the file in the background.
 
 **Short calls landing near 5 s on an automated editor:**
-1. Run `unity command editor_focus` once.
+1. Run `unity command editor focus` once.
 2. If calls still land at almost exactly 5 s, macOS is throttling an editor whose window is hidden. Run `open "/Applications/Unity/Hub/Editor/<version>/Unity.app"`, which activates the running editor without relaunching it.
 
-The signature of this state is `editor_status` answering instantly while `eval` times out.
+The signature of this state is `editor status` answering instantly while `script eval` times out.
 
 ## Domain reloads
 - **What causes them:** compiling scripts, and entering or leaving play mode.
@@ -84,24 +88,24 @@ The signature of this state is `editor_status` answering instantly while `eval` 
 
 ## Compiling and testing
 - **Compiling:** do it through the editor, never on your own.
-  - Run `unity command recompile`, then poll `recompile_status` until `completed` or `up_to_date`. This works while the editor is unfocused.
+  - Run `unity command script recompile`, then poll `script recompile_status` until `completed` or `up_to_date`. This works while the editor is unfocused.
   - A 3 s `completed` can be a real compile. The first time in a session, confirm it from the assembly's modification time under `Library/ScriptAssemblies/`.
-- **New files under `Assets`:** run `unity command eval 'UnityEditor.AssetDatabase.Refresh();'` so the editor imports them and writes their `.meta` files. An asmdef edit plus a refresh compiles on its own.
-- **Tests:** run them only in the open editor. Start them with `unity command run_tests --mode EditMode --async_tests true`, then poll `test_status` until `status` is `completed`.
+- **New files under `Assets`:** run `unity command script eval 'UnityEditor.AssetDatabase.Refresh();'` so the editor imports them and writes their `.meta` files. An asmdef edit plus a refresh compiles on its own.
+- **Tests:** run them only in the open editor. Start them with `unity command test run --mode EditMode --async_tests true`, then poll `test status` until `status` is `completed`.
 - **After tests or play:** a test run or play session can return an edited prefab or scene to its saved state. Hash the assets you edited before and after editor runs, and diff them right before committing.
 
 ## Waiting without polling
 Never run a sleep loop in the foreground, or repeat a status call turn after turn.
 - **A long command** (tests, a build, an editor launch, a compile you must wait for): run one script that starts it, polls until it's done and prints the result, as a background command. The session is woken when it exits.
-- **A condition inside the editor:** `unity command wait_for` checks it on the editor's frame loop. A synchronous wait blocks every other command until it resolves, so pass `async=true` and poll `wait_status`. Async waits don't survive a domain reload.
+- **A condition inside the editor:** `unity command job wait` checks it on the editor's frame loop. A synchronous wait blocks every other command until it resolves, so pass `--async true` and poll `job wait_status`. Async waits don't survive a domain reload.
 - **A condition outside the editor:** use the Monitor tool with an until-condition.
 
-## Writing `eval` snippets
-An `eval` snippet is the body of a method.
+## Writing `script eval` snippets
+A `script eval` snippet is the body of a method.
 - **No `using` directives.** They're a compile error, so fully qualify every type (`System.Text.StringBuilder`, `UnityEngine.GameObject`). A bare `Object` is ambiguous; write `UnityEngine.Object`.
 - **Getting output back:** `return` a value to get it in the result. `Debug.Log` output does not come back; write longer output to a file with `System.IO.File.WriteAllText` and read it.
 - **Size:** keep each call well under 5 s.
-- **Prefer `eval` to the MCP's `Unity_RunCommand`.** `eval` has no sandbox and references the project's assemblies; `Unity_RunCommand` can't reference project assemblies or use reflection. In a player, `eval` doesn't reference them either; see "Development players".
+- **Prefer `script eval` to the MCP's `Unity_RunCommand`.** `script eval` has no sandbox and references the project's assemblies; `Unity_RunCommand` can't reference project assemblies or use reflection. In a player, `eval` doesn't reference them either; see "Development players".
 - **Prefer public entry points.** Use the project's public entry points rather than reflecting into private members, whose names can change without a compile error to warn you.
 - **Sampling animation:** an Animator on a model instantiated straight from an FBX defaults to `CullUpdateTransforms` and doesn't evaluate off camera. Set it to `AlwaysAnimate`, and check that some bone moves before trusting the samples.
 
@@ -119,36 +123,41 @@ An `eval` snippet is the body of a method.
 ## Sharing the editor
 The editor runs one command at a time, and contention shows up as spurious timeouts.
 - At most one agent talks to the editor at once. Parallel fan-out agents get no editor access.
-- A subagent that does use the editor sticks to pure reads: `AssetDatabase` lookups, hierarchy walks, `console`, `editor_status`.
+- A subagent that does use the editor sticks to pure reads: `AssetDatabase` lookups, hierarchy walks, `console get`, `editor status`.
 - Some calls write even though they read like reads: a scene load, a Selection change, `ExecuteMenuItem`, and a `SetDirty` or save. Keep subagents away from them.
 - Never give a subagent the editor while the main session is compiling or running tests.
 
 ## Development players
 A development standalone build can run the same command server, so an agent can drive a built player as it drives the editor, for example as a second network peer.
-1. **Turn on** Project Settings › Pipeline › Runtime › `enableInBuilds`, with `set_runtime_pipeline_settings --settings '{"enableInBuilds":true}' --confirm true`. It's stored in `ProjectSettings/Packages/com.unity.pipeline/RuntimePipelineConfig.json`.
-2. **Build** outside play mode, as a background command that polls `build_status`:
+1. **Turn on** `enableInDevelopmentBuilds` with `unity command settings.runtime_pipeline set --settings '{"enableInDevelopmentBuilds":true}' --confirm true`, and check it with `settings.runtime_pipeline get`.
+   - It's stored as the `ENABLE_RUNTIME_PIPELINE_DEV` scripting define on every build target. That reaches `ProjectSettings.asset` only when the project is saved, so run `unity command editor save_all` and commit the file.
+   - Upgrading to Pipeline 0.9 converts an older `enableInBuilds: true` to this setting, but leaves the save to you.
+   - Without the define, a development build leaves the server out: the runtime assembly compiles only in the editor, with `ENABLE_RUNTIME_PIPELINE_DEV`, or with `ENABLE_RUNTIME_PIPELINE`.
+2. **Build** outside play mode, as a background command that polls `build status`:
    ```bash
-   unity command build --target StandaloneOSX --outputPath <path>.app --options '["Development","DetailedBuildReport"]' --confirm true
+   unity command build run --target StandaloneOSX --outputPath <path>.app --options '["Development","DetailedBuildReport"]' --confirm true
    ```
+   On Windows, build `--target StandaloneWindows64` with `--outputPath <folder>/<name>.exe`.
    - Supplying `options` drops the default `DetailedBuildReport`, so list it.
-   - `build_status`'s `data.result` is a JSON string, so parse it twice. Don't recurse on `result`: the build report inside has its own `result` key (`Succeeded`).
-3. **Launch** it. On macOS, `open -g -n <app> --args …` keeps it from taking focus from the user. It's ready when `unity command --runtime-path <path> runtime_status` succeeds.
-4. **Drive it** with `unity command --runtime-path <path> <command>`. On macOS the path is the `.app` bundle; elsewhere it's the folder next to the executable. `unity command --runtime-path <path>` lists what the player exposes; `quit` closes it.
+   - `build status`'s `data.result` is a JSON string, so parse it twice. Don't recurse on `result`: the build report inside has its own `result` key (`Succeeded`).
+3. **Launch** it. On macOS, `open -g -n <app> --args …` keeps it from taking focus from the user. Git Bash on Windows has no `open`; use `powershell.exe -NoProfile -Command "Start-Process '<exe>' -ArgumentList '…'"`. It's ready when `unity command --runtime-path <path> runtime status` succeeds.
+4. **Drive it** with `unity command --runtime-path <path> <group> <name>`. On macOS the path is the `.app` bundle; elsewhere it's the folder next to the executable. `unity command --runtime-path <path>` lists the player's command groups; `runtime quit` closes it.
 
 **What's different in a player:**
 - **`eval` can't name the project's own types.** In a player it only references assemblies named `UnityEngine*`, `Assembly-CSharp`, `netstandard`, `mscorlib`, `System.*` or `Unity.Pipeline*`. Types in the project's asmdefs, and in packages such as TextMeshPro, fail with CS0246. Reach them by reflection, finding each type through `AppDomain.CurrentDomain.GetAssemblies()`, or write a command.
 - **A `[CliCommand]` static method compiles with the project**, so it uses the project's types directly. A player finds it by reflection over its loaded assemblies, and the editor finds it after a recompile.
-  - The attribute lives in `Unity.Pipeline`, which only compiles for the editor and development builds. Put commands in an assembly constrained to `UNITY_EDITOR || DEVELOPMENT_BUILD`.
+  - The attributes live in `Unity.Pipeline.Attributes`, which compiles in every build; reference it, not `Unity.Pipeline`, from the command's assembly. Constrain that assembly to `UNITY_EDITOR || DEVELOPMENT_BUILD` so release builds leave the command out.
+  - `[CliCommand(name, description)]` puts the command in the `global` group, where its bare name still runs it. `[CliCommand(group, name, description)]`, or a dotted name, puts it in a group.
   - Leave `MainThreadRequired` on for anything that touches Unity objects.
   - Commands answer in tens of milliseconds, where `eval` compiles every call. But changing a command means rebuilding the player, so `eval` stays the tool for one-off probes.
 - **There's no `EditorApplication.update`.** For per-frame sampling, add a lambda to `Application.onBeforeRender` from `eval`; that works in editor play mode too. Stamp each row with wall-clock time, so files from two processes line up.
 - **Screenshots:** `ScreenCapture.CaptureScreenshot(path)` from `eval`.
 - **Main-thread commands run from the player's `Update`.** So a player that pauses when it loses focus stops answering. Check Player Settings › Run In Background.
 
-**What `enableInBuilds` leaves around:**
+**What a Pipeline-enabled build leaves around:**
 - **Build folders:** each build bakes the settings into `Assets/Settings/Pipeline/Resources/`. It deletes the baked assets afterwards, but leaves the folders and their `.meta` files. A project that doesn't use that folder itself can ignore `/Assets/Settings/` and `/Assets/Settings.meta`.
 - **A port file in the project:** editor play mode runs the runtime server too, and writes `.unity-pipeline-runtime-port` at the project root while it plays. Ignore it.
 
-**Release builds leave the server out entirely.** The Pipeline's runtime assemblies are constrained to `UNITY_EDITOR || DEVELOPMENT_BUILD || ENABLE_RUNTIME_PIPELINE`. To confirm a release build lacks some code:
+**Release builds leave the server out entirely** unless `enableInReleaseBuilds` sets `ENABLE_RUNTIME_PIPELINE`, which exposes code execution over a local HTTP server. To confirm a release build lacks some code:
 - Check the build's `Managed` folder and `ScriptingAssemblies.json`.
 - Search binaries for a string literal as UTF-16, the way .NET stores it; a plain `grep` misses it.
