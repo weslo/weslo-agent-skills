@@ -5,6 +5,7 @@ Agent skills I use across projects, one per `skills/<name>/SKILL.md`.
 - `address-github-issue` takes a GitHub issue from investigation to an open PR, and merges it when asked.
 - `complete-github-issue` waits for CI, squash-merges an approved PR once it passes, confirms its issue closed, resyncs main and deletes the branch. A CI failure stops it with a fix or a diagnosis for you.
 - `review-github-pr` reviews a PR with inline comments, then confirms fixes and resolves threads on later passes.
+- `technical-review` reviews a whole project's code and architecture for quality, consistency, organization and security, tracked in a GitHub issue or kept in the conversation, then works through your responses to it. Its topics are in `skills/technical-review/review-prompt.md`.
 - `unity-use` is how to drive a Unity editor from an agent session: automation launch, the 5 s command limit, domain reloads, waiting without polling, `eval` snippets, the files only the editor may change, and driving development players.
 
 ## Install
