@@ -3,7 +3,7 @@
 Agent skills I use across projects, one per `skills/<name>/SKILL.md`.
 
 - `address-github-issue` takes a GitHub issue from investigation to an open PR, and merges it when asked.
-- `blender-use` is how to drive Blender from an agent session, live through the MCP for Blender or headless: launching and quitting it without losing the user's work, saving without losing the file's layout, rebuilding an edit from the committed file, checking with numbers before images, and checking what an export changed. The `blender-*` skills cover the craft.
+- `blender-use` is how to drive Blender from an agent session, live through the MCP for Blender or headless: launching and quitting it without losing the user's work, closing a Blender it launched once the work is done, saving without losing the file's layout, rebuilding an edit from the committed file, checking with numbers before images, and checking what an export changed. The `blender-*` skills cover the craft.
 - `clarify` answers a question about something Claude said in plain language, without jargon, acronyms or shorthand, and does nothing else that turn: no tools, no changes, nothing built or run. Only you can run it, as `/clarify <question>`; on its own, it re-explains Claude's last reply.
 - `complete-github-issue` waits for CI, squash-merges an approved PR once it passes, confirms its issue closed, resyncs main and deletes the branch. A CI failure stops it with a fix or a diagnosis for you.
 - `create-github-issue` files a GitHub issue that `address-github-issue` can later pick up cold: a short, plain body with links, the project's own labels, you as assignee, a milestone when one clearly fits, and parent, sub-issue and blocking relationships.

@@ -1,6 +1,6 @@
 ---
 name: blender-use
-description: Read before driving Blender from an agent session, through the MCP for Blender (`execute_blender_code`, `look`, `get_scene_info`) or headless (`blender -b`). Covers choosing live or headless; launching Blender, and checking what is open before touching it; opening and saving without losing the file's layout; quitting without saving; rebuilding an edit from the committed file instead of patching the open one; checking with numbers before images, including posing against a stand-in prop; previewing a layered pose over a clip; checking that an export changed only what you meant; and screenshots without the MCP. Use it before the first Blender call of a session. How to model, rig, animate and export is in the `blender-*` and `keyframe-coach` skills.
+description: Read before driving Blender from an agent session, through the MCP for Blender (`execute_blender_code`, `look`, `get_scene_info`) or headless (`blender -b`). Covers choosing live or headless; launching Blender, checking what is open before touching it, and closing a Blender you launched when done; opening and saving without losing the file's layout; quitting without saving; rebuilding an edit from the committed file instead of patching the open one; checking with numbers before images, including posing against a stand-in prop; previewing a layered pose over a clip; checking that an export changed only what you meant; and screenshots without the MCP. Use it before the first Blender call of a session. How to model, rig, animate and export is in the `blender-*` and `keyframe-coach` skills.
 ---
 
 # Using Blender from an agent session
@@ -25,6 +25,7 @@ How to drive Blender reliably and cheaply. The `blender-*` skills and `keyframe-
    bpy.app.timers.register(lambda: bpy.ops.wm.quit_blender() and None, first_interval=0.5)
    ```
 6. **Leave preferences alone.** Don't turn off the save prompt or change add-ons from a script: preferences can save themselves, and they are the user's.
+7. **Close what you opened.** If you launched Blender, quit it as in step 5 once the work is done, rather than leaving it open for later; launch it again the next time work needs it. Leave a Blender the user had open running.
 
 ## Rebuild from the committed file
 Don't build up an edit by patching the open file call after call.
